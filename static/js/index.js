@@ -1,5 +1,11 @@
-// create map object
+// map object
 var mymap = L.map('mapid').setView([0, 0], 2);
+
+// colorscale for circle markers
+var colorScale = d3.scaleLinear()
+.domain([0,8])
+.range(["green", "red"])
+.interpolate(d3.interpolateHsl);
 
 // basemap tilelayer
 L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
@@ -12,14 +18,12 @@ L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_toke
 // earthquake json link
 var url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson';
 
-// retrieve geojson data
-d3.json(url, function (error, response) {
-    if (error) console.warn(error);
 
+///////////////////////////////
+// markers and popups
+///////////////////////////////
+function markers(response) {
 
-    ///////////////////////////////
-    // markers
-    ///////////////////////////////
     L.geoJson(response, {
 
         // add circle markers
@@ -27,12 +31,6 @@ d3.json(url, function (error, response) {
 
             // magnitude
             var mag = +feature.properties.mag;
-
-            // circle marker color scale
-            var colorScale = d3.scaleLinear()
-                .domain([1,8])
-                .range(["green", "red"])
-                .interpolate(d3.interpolateHsl);
 
             // circle marker options
             var geojsonMarkerOptions = {
@@ -44,50 +42,58 @@ d3.json(url, function (error, response) {
                 fillOpacity: 0.8
             };
 
-            return L.circleMarker(latlng, geojsonMarkerOptions);
+            // date
+            var d = new Date(feature.properties.time);
+            var parseDate = d3.timeFormat("%Y-%m-%d");
+
+            // popup
+            var popup = `<strong>${feature.properties.place}</strong><br>${parseDate(d)}<br>Magnitude: ${mag}`;
+
+            return L.circleMarker(latlng, geojsonMarkerOptions).bindPopup(popup);
         }
-
     }).addTo(mymap);
+}
 
+///////////////////////////////
+// legend
+///////////////////////////////
 
-    ///////////////////////////////
-    // legend
-    ///////////////////////////////
+var legend = L.control({ position: 'bottomright' });
 
-    // circle marker color scale
-    var colorScale = d3.scaleLinear()
-    .domain([0,8])
-    .range(["green", "red"])
-    .interpolate(d3.interpolateHsl);
+legend.onAdd = function() {
+    var div = L.DomUtil.create('div', 'info legend');
+    var limits = [1,2,3,4,5,6,7,8];
+    // console.log(colors)
+    var labels = []
 
-    var legend = L.control({ position: 'bottomright' });
+    // Add min & max
+    div.innerHTML = `<h1>Earthquake Intensity</h1>`;
+    // <div class="labels">
+    //     <div class="min">1</div>
+    //     <div class="min">1</div> 
+    //     <div class="max">8+</div>
+    // </div>`;
 
-    legend.onAdd = function() {
-      var div = L.DomUtil.create('div', 'info legend');
-      var limits = d3.range(8);
-      // console.log(colors)
-      var labels = []
-    
-      // Add min & max
-      div.innerHTML = `<h1>Earthquake Intensity</h1>
-        <div class="labels">
-          <div class="min">1</div> 
-          <div class="max">8+</div>
-        </div>`;
-    
-      limits.forEach((d,i)=> {
-        labels.push('<li style="background-color: ' + colorScale(i) + '"></li>')
-      })
-      // console.log(labels)
-    
-      div.innerHTML += '<ul>' + labels.join('') + '</ul>';
-      // console.log(div.innerHTML)
-      return div
-    };
+    limits.forEach((d,i)=> {
+    // labels.push('<li style="background-color: ' + colorScale(i) + '"></li>')
+    labels.push('<li style="background-color: ' + colorScale(i) + '">' + (i+1) + '</li>')
+    })
+    // console.log(labels)
+
+    div.innerHTML += '<ul>' + labels.join('') + '</ul>';
+    // console.log(div.innerHTML)
+    return div
+};
 
 legend.addTo(mymap);
 
 
-    
+// =====================================
+// retrieve geojson data create markers/popups
+// =====================================
+d3.json(url, function (error, response) {
+    if (error) console.warn(error);
+
+    markers(response);
 
 })

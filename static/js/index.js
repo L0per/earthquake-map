@@ -1,5 +1,5 @@
-// map object
-var mymap = L.map('mapid').setView([0, 0], 2);
+// earthquake json link
+var url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson';
 
 // colorscale for circle markers
 var colorScale = d3.scaleLinear()
@@ -7,24 +7,91 @@ var colorScale = d3.scaleLinear()
 .range(["green", "red"])
 .interpolate(d3.interpolateHsl);
 
-// basemap tilelayer
-L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
-    attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, <a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
-    maxZoom: 10,
-    id: 'mapbox/dark-v10',
-    accessToken: accessToken
-}).addTo(mymap);
 
-// earthquake json link
-var url = 'https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/1.0_month.geojson';
+////////////////////////////////////////////////
+// create map
+// input: quake layer from function below
+////////////////////////////////////////////////
 
+function createMap(quakeLayer, plateLayer) {
+    // dark basemap object
+    var baseDark = L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+        attribution: 'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        maxZoom: 10,
+        id: 'mapbox/dark-v10',
+        accessToken: accessToken
+    });
 
-///////////////////////////////
-// markers and popups
-///////////////////////////////
-function markers(response) {
+    // satellite basemap object
+    var baseSat = L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token={accessToken}', {
+        attribution: 'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+        maxZoom: 10,
+        id: 'mapbox/satellite-v9',
+        accessToken: accessToken
+    });
 
-    L.geoJson(response, {
+    // map object
+    var mymap = L.map('mapid', {
+        center: [0, 0],
+        zoom: 2,
+        layers: [baseDark, quakeLayer]
+    });
+
+    // objects holding both base maps and overlay maps for layer control
+    var baseMaps = {
+        "Dark": baseDark,
+        "Satellite": baseSat
+    };
+
+    var overlayMaps = {
+        "Earthquakes": quakeLayer,
+        "Plate Boundaries": plateLayer
+    };
+
+    // layer control
+    L.control.layers(baseMaps, overlayMaps).addTo(mymap);
+
+    ///////////////////////////////
+    // legend
+    ///////////////////////////////
+
+    // create legend object
+    var legend = L.control({ position: 'bottomright' });
+
+    legend.onAdd = function() {
+        
+        // create legend html
+        var div = L.DomUtil.create('div', 'info legend');
+
+        // legend values
+        var limits = [1,2,3,4,5,6,7,8];
+        var labels = []
+
+        // legend title
+        div.innerHTML = `<h1>Earthquake Intensity</h1>`;
+
+        // legend value boxes
+        limits.forEach((d,i)=> {
+        labels.push('<li style="background-color: ' + colorScale(i) + '">' + (i+1) + '</li>')
+        })
+
+        // add legend list to ul html
+        div.innerHTML += '<ul>' + labels.join('') + '</ul>';
+
+        return div
+    };
+
+    legend.addTo(mymap);
+}
+
+////////////////////////////////////////////////
+// earthquake and plate layers
+// input: d3 json response
+////////////////////////////////////////////////
+function overlayLayers(quakeResponse, plateResponse) {
+
+    // earthquake layer
+    var quakeLayer = L.geoJson(quakeResponse, {
 
         // add circle markers
         pointToLayer: function (feature, latlng) {
@@ -47,53 +114,37 @@ function markers(response) {
             var parseDate = d3.timeFormat("%Y-%m-%d");
 
             // popup
-            var popup = `<strong>${feature.properties.place}</strong><br>${parseDate(d)}<br>Magnitude: ${mag}`;
+            var tooltip = `<strong>${feature.properties.place}</strong><br>${parseDate(d)}<br>Magnitude: ${mag}`;
 
-            return L.circleMarker(latlng, geojsonMarkerOptions).bindPopup(popup);
+            return L.circleMarker(latlng, geojsonMarkerOptions).bindTooltip(tooltip).openTooltip();
         }
-    }).addTo(mymap);
-}
-
-///////////////////////////////
-// legend
-///////////////////////////////
-
-var legend = L.control({ position: 'bottomright' });
-
-legend.onAdd = function() {
-    var div = L.DomUtil.create('div', 'info legend');
-    var limits = [1,2,3,4,5,6,7,8];
-    // console.log(colors)
-    var labels = []
-
-    // Add min & max
-    div.innerHTML = `<h1>Earthquake Intensity</h1>`;
-    // <div class="labels">
-    //     <div class="min">1</div>
-    //     <div class="min">1</div> 
-    //     <div class="max">8+</div>
-    // </div>`;
-
-    limits.forEach((d,i)=> {
-    // labels.push('<li style="background-color: ' + colorScale(i) + '"></li>')
-    labels.push('<li style="background-color: ' + colorScale(i) + '">' + (i+1) + '</li>')
     })
-    // console.log(labels)
 
-    div.innerHTML += '<ul>' + labels.join('') + '</ul>';
-    // console.log(div.innerHTML)
-    return div
-};
+    // plate boundaries layer
+    var plateLayer = L.geoJson(plateResponse, {
+        style: {
+            'color': '#FF8C1F',
+            "weight": 3,
+            "opacity": 0.65
+        }
+    })
 
-legend.addTo(mymap);
-
+    createMap(quakeLayer, plateLayer);
+}
 
 // =====================================
 // retrieve geojson data create markers/popups
 // =====================================
-d3.json(url, function (error, response) {
+
+// earthqake json
+d3.json(url, function (error, quakeResponse) {
     if (error) console.warn(error);
+    console.log(quakeResponse)
 
-    markers(response);
-
+    // plates json
+    d3.json('PB2002_boundaries.json', function (error, plateResponse) {
+        if (error) console.warn(error);
+    
+        overlayLayers(quakeResponse, plateResponse);
+    })
 })
